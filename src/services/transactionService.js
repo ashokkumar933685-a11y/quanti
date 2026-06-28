@@ -25,7 +25,7 @@ function recategorize(id, category) {
     err.statusCode = 400;
     throw err;
   }
-  return store.update(id, { category, autoTagged: false });
+  return store.update(id, { category, autoTagged: false, needsReview: false });
 }
 
 function listTransactions() {
@@ -53,12 +53,12 @@ function seed() {
   store.reset();
   const samples = [
     'Received Rs. 45,000 from Acme Corp Payroll Salary for June',
-    'Paid Rs. 250 to Zomato for lunch order',
+    'Rs.250 debited at Swiggy Instamart. Avl Bal Rs.45,300',
     'Paid Rs. 180 to Uber for ride to office',
-    'Paid Rs. 1,200 to Amazon Pay - Cashback offer applied',
+    'Rs. 1,200 spent on your HDFC credit card at Amazon Pay - Cashback offer applied',
     'Received Rs. 1,200 from Private Company Ltd',
     'Paid Rs. 99 to Swiggy Instamart',
-    'Paid Rs. 540 to BigBasket groceries',
+    'URGENT: Your account KYC is blocked. Click http://hdfc-kyc-verify.xyz and share OTP to unblock and claim Rs.10,000',
   ];
   for (const msg of samples) {
     try {

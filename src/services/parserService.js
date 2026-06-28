@@ -3,82 +3,192 @@
 const { DEFAULT_CATEGORY } = require('../config/categories');
 const {
   MERCHANT_KEYWORDS,
+  DIRECTION_VERBS,
+  DIRECTION_GUARDS,
+  FRAUD_SIGNALS,
   REWARD_PARTNERS,
   CASHBACK_KEYWORD,
   REWARD_POINT_RATE,
 } = require('../config/keywords');
 
-/**
- * Words that indicate money LEAVING the account (outbound / debit).
- */
-const DEBIT_HINTS = ['paid', 'sent', 'debited', 'spent', 'withdrawn', 'purchase', 'debit'];
+/* ───────────────────────── helpers ───────────────────────── */
 
-/**
- * Words that indicate money ENTERING the account (inbound / credit).
- */
-const CREDIT_HINTS = ['received', 'credited', 'refund', 'deposited', 'credit'];
-
-/**
- * Extract the numeric amount from a raw alert.
- * Handles formats like "Rs. 250", "Rs.1,200", "INR 99.50", "₹500".
- * @returns {number|null}
- */
-function extractAmount(text) {
-  const match = text.match(/(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
-  if (!match) return null;
-  const cleaned = match[1].replace(/,/g, '');
-  const value = Number.parseFloat(cleaned);
-  return Number.isFinite(value) ? value : null;
+/** True when `ch` is a letter or digit (treats undefined edges as a boundary). */
+function isWordChar(ch) {
+  return ch !== undefined && /[a-z0-9]/i.test(ch);
 }
 
 /**
- * Find the position of the first whole-word hint from `hints` in `text`,
- * or Infinity if none match. Word boundaries stop false positives like
- * "credit" matching inside "credit card".
+ * Case-insensitive whole-word-ish search. Returns the index of the first
+ * occurrence of `needle` in `haystack` whose neighbours are non-alphanumeric
+ * (or a string edge), or -1. Works for multi-word needles too.
  */
-function firstHintIndex(text, hints) {
-  let best = Infinity;
-  for (const hint of hints) {
-    const match = text.match(new RegExp(`\\b${hint}\\b`, 'i'));
-    if (match && match.index < best) best = match.index;
+function boundaryIndexOf(haystack, needle, from = 0) {
+  const h = haystack.toLowerCase();
+  const n = needle.toLowerCase();
+  let i = h.indexOf(n, from);
+  while (i !== -1) {
+    const before = h[i - 1];
+    const after = h[i + n.length];
+    if (!isWordChar(before) && !isWordChar(after)) return i;
+    i = h.indexOf(n, i + 1);
   }
-  return best;
+  return -1;
+}
+
+/* ───────────────────── stage 1: amount ───────────────────── */
+
+/**
+ * Find every currency amount in the text. Captures the raw substring, the
+ * char offset, the normalized symbol and the parsed numeric value.
+ * Handles "Rs. 250", "Rs.1,200", "INR 99.50", "₹500", "1,20,000" etc.
+ * @returns {Array<{ raw:string, value:number, index:number, symbol:string }>}
+ */
+function findAmountCandidates(text) {
+  const re = /(rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)/gi;
+  const out = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const value = Number.parseFloat(m[2].replace(/,/g, ''));
+    if (!Number.isFinite(value)) continue;
+    let symbol = m[1].toUpperCase().replace('.', '');
+    if (symbol === 'RS') symbol = 'Rs';
+    if (m[1] === '₹') symbol = '₹';
+    out.push({ raw: m[0], value, index: m.index, symbol });
+  }
+  return out;
 }
 
 /**
- * Determine whether a transaction is a 'credit' (incoming) or 'debit'
- * (outbound). The directional keyword that appears EARLIEST in the alert
- * wins (UPI alerts lead with the action verb, e.g. "Paid ... credit card").
- * Defaults to 'debit' when ambiguous (conservative for a spend tracker).
- * @returns {'credit'|'debit'}
+ * Pick the transaction amount, not the running balance. Prefer the candidate
+ * closest to the directional verb; with no verb, fall back to the largest.
+ * @returns {{ amount:number|null, symbol:string|null, raw:string|null, candidateCount:number, confidence:'high'|'low'|'none' }}
+ */
+function selectAmount(candidates, verbIndex) {
+  if (candidates.length === 0) {
+    return { amount: null, symbol: null, raw: null, candidateCount: 0, confidence: 'none' };
+  }
+  if (candidates.length === 1) {
+    const c = candidates[0];
+    return { amount: c.value, symbol: c.symbol, raw: c.raw, candidateCount: 1, confidence: 'high' };
+  }
+
+  let chosen;
+  let confidence;
+  if (verbIndex === null) {
+    chosen = candidates.reduce((a, b) => (b.value > a.value ? b : a));
+    confidence = 'low';
+  } else {
+    const dist = (c) => Math.abs(c.index - verbIndex);
+    const min = Math.min(...candidates.map(dist));
+    const nearest = candidates.filter((c) => dist(c) === min);
+    chosen = nearest.reduce((a, b) => (b.value > a.value ? b : a));
+    confidence = nearest.length === 1 ? 'high' : 'low';
+  }
+
+  return {
+    amount: chosen.value,
+    symbol: chosen.symbol,
+    raw: chosen.raw,
+    candidateCount: candidates.length,
+    confidence,
+  };
+}
+
+/* ─────────────────── stage 2: direction ───────────────────── */
+
+/**
+ * Is this verb hit immediately followed by one of its guard words?
+ * ("credit card", "debit limit" → guarded out).
+ */
+function isGuarded(text, verb, direction, hitIndex) {
+  const guards = DIRECTION_GUARDS[direction] || [];
+  const after = text.slice(hitIndex + verb.length);
+  // next word after optional filler ("your", "the") + spaces
+  const m = after.match(/^\s+(?:your\s+|the\s+|a\s+)?([a-z]+)/i);
+  if (!m) return false;
+  const nextWord = m[1].toLowerCase();
+  return guards.includes(nextWord);
+}
+
+/**
+ * Weighted, guarded, three-state direction detection. Sums verb weights per
+ * polarity (ignoring guarded hits), returns the heavier side. Defaults to
+ * 'debit' when there is no usable signal (conservative for a spend tracker).
+ * @returns {{ direction:'credit'|'debit'|'unknown', verbIndex:number|null, verbsFired:string[], guardedOut:string[], confidence:'high'|'low'|'none' }}
  */
 function detectDirection(text) {
-  const creditAt = firstHintIndex(text, CREDIT_HINTS);
-  const debitAt = firstHintIndex(text, DEBIT_HINTS);
-  if (creditAt === Infinity && debitAt === Infinity) return 'debit';
-  return creditAt < debitAt ? 'credit' : 'debit';
-}
+  let creditWeight = 0;
+  let debitWeight = 0;
+  let creditIdx = null;
+  let debitIdx = null;
+  const verbsFired = [];
+  const guardedOut = [];
 
-/**
- * Scan the alert for a known corporate merchant keyword and return the
- * matched merchant + its fallback category.
- * @returns {{ merchant: string, category: string }|null}
- */
-function detectMerchant(text) {
-  const lower = text.toLowerCase();
-  for (const entry of MERCHANT_KEYWORDS) {
-    if (lower.includes(entry.keyword.toLowerCase())) {
-      return { merchant: entry.keyword, category: entry.category };
+  for (const { verb, direction, weight } of DIRECTION_VERBS) {
+    const idx = boundaryIndexOf(text, verb);
+    if (idx === -1) continue;
+    if (isGuarded(text, verb, direction, idx)) {
+      guardedOut.push(verb);
+      continue;
+    }
+    verbsFired.push(verb);
+    if (direction === 'credit') {
+      creditWeight += weight;
+      if (creditIdx === null) creditIdx = idx;
+    } else {
+      debitWeight += weight;
+      if (debitIdx === null) debitIdx = idx;
     }
   }
-  return null;
+
+  if (creditWeight === 0 && debitWeight === 0) {
+    return { direction: 'unknown', verbIndex: null, verbsFired, guardedOut, confidence: 'none' };
+  }
+
+  const direction = creditWeight > debitWeight ? 'credit' : 'debit';
+  const verbIndex = direction === 'credit' ? creditIdx : debitIdx;
+  const margin = Math.abs(creditWeight - debitWeight);
+  const confidence = margin > 3 ? 'high' : 'low';
+  return { direction, verbIndex, verbsFired, guardedOut, confidence };
 }
 
+/* ─────────────────── stage 3: merchant ────────────────────── */
+
 /**
- * Detect whether an OUTBOUND alert qualifies for the simulated rewards
- * sub-metric: it must contain the word "Cashback" or a known reward partner.
- * @returns {{ trigger: string }|null}
+ * Boundary-safe, longest-match-wins merchant detection. Order-independent;
+ * "Swiggy Instamart" beats "Swiggy", "UberEats" beats "Uber".
+ * @returns {{ merchant:string, category:string }|null}
  */
+function detectMerchant(text) {
+  let best = null;
+  for (const entry of MERCHANT_KEYWORDS) {
+    const idx = boundaryIndexOf(text, entry.keyword);
+    if (idx === -1) continue;
+    if (!best || entry.keyword.length > best.keyword.length) {
+      best = { merchant: entry.keyword, category: entry.category, keyword: entry.keyword };
+    }
+  }
+  return best ? { merchant: best.merchant, category: best.category } : null;
+}
+
+/* ─────────────────── stage 4: fraud scan ──────────────────── */
+
+/**
+ * Scan for fraud / spam signals. Returns the list of human-readable reasons
+ * (empty when the message looks legitimate).
+ * @returns {string[]}
+ */
+function detectFraud(text) {
+  const reasons = [];
+  for (const { reason, test } of FRAUD_SIGNALS) {
+    if (test.test(text)) reasons.push(reason);
+  }
+  return reasons;
+}
+
+/* ───────────────────── rewards (unchanged) ────────────────── */
+
 function detectRewardTrigger(text) {
   const lower = text.toLowerCase();
   if (lower.includes(CASHBACK_KEYWORD.toLowerCase())) {
@@ -88,10 +198,6 @@ function detectRewardTrigger(text) {
   return partner ? { trigger: partner } : null;
 }
 
-/**
- * Build the green "Expected Savings" sub-metric for a qualifying outbound
- * transaction. Points are simulated as a fixed percentage of the spend.
- */
 function buildExpectedSavings(amount, trigger) {
   const points = Math.max(1, Math.round(amount * REWARD_POINT_RATE));
   return {
@@ -101,18 +207,17 @@ function buildExpectedSavings(amount, trigger) {
   };
 }
 
-/**
- * Produce a clean, human-readable description from the raw alert.
- * Falls back to the trimmed raw message.
- */
 function buildDescription(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/* ───────────────────────── orchestrator ───────────────────── */
+
 /**
- * Parse a raw transaction alert string into a structured, categorized
- * transaction object. This is the single source of truth for all
- * automated tagging and reward detection.
+ * Parse ANY pasted SMS into a structured, categorized transaction. Designed
+ * for free-text input (real bank alerts or fraud/spam), so it never throws on
+ * a missing amount — it returns a flagged record instead. The only throw is
+ * for non-string / empty input.
  *
  * @param {string} rawMessage
  * @returns {object} parsed transaction (without id/timestamp)
@@ -123,46 +228,65 @@ function parseAlert(rawMessage) {
   }
 
   const text = rawMessage.trim();
-  const amount = extractAmount(text);
 
-  if (amount === null) {
-    throw new Error('Could not detect a transaction amount in the alert');
-  }
-
-  const direction = detectDirection(text);
+  // direction first (it locates the verb that anchors amount selection)
+  const dir = detectDirection(text);
+  const amt = selectAmount(findAmountCandidates(text), dir.verbIndex);
   const merchantMatch = detectMerchant(text);
+  const suspicionReasons = detectFraud(text);
 
-  // Auto-tagging: a detected merchant wins; otherwise income defaults to
-  // SALARY only when explicitly matched, else everything is MISC.
+  // For a spend tracker, an undetected direction falls back to 'debit'.
+  const direction = dir.direction === 'unknown' ? 'debit' : dir.direction;
   const category = merchantMatch ? merchantMatch.category : DEFAULT_CATEGORY;
   const autoTagged = Boolean(merchantMatch);
+  const suspicious = suspicionReasons.length > 0;
 
-  // Reward / savings rule applies ONLY to outbound (debit) transactions.
+  // Reward / savings applies ONLY to outbound (debit) transactions, and we
+  // never reward a suspected-fraud message.
   let expectedSavings = null;
-  if (direction === 'debit') {
+  if (direction === 'debit' && !suspicious && amt.amount !== null) {
     const reward = detectRewardTrigger(text);
     if (reward) {
-      expectedSavings = buildExpectedSavings(amount, reward.trigger);
+      expectedSavings = buildExpectedSavings(amt.amount, reward.trigger);
     }
   }
+
+  const needsReview =
+    amt.amount === null ||
+    amt.confidence === 'low' ||
+    dir.direction === 'unknown' ||
+    dir.confidence === 'low' ||
+    suspicious;
 
   return {
     rawMessage: text,
     description: buildDescription(text),
-    amount,
+    amount: amt.amount,
+    currencySymbol: amt.symbol,
     direction,
     category,
     autoTagged,
     merchant: merchantMatch ? merchantMatch.merchant : null,
     expectedSavings,
+    suspicious,
+    suspicionReasons,
+    needsReview,
+    trace: {
+      amountSubstring: amt.raw,
+      directionVerbs: dir.verbsFired,
+      guardedOut: dir.guardedOut,
+      merchantKeyword: merchantMatch ? merchantMatch.merchant : null,
+    },
   };
 }
 
 module.exports = {
   parseAlert,
-  extractAmount,
+  findAmountCandidates,
+  selectAmount,
   detectDirection,
   detectMerchant,
+  detectFraud,
   detectRewardTrigger,
   buildExpectedSavings,
 };

@@ -2,75 +2,173 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quanti · Money Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1A0E2E" />
+    <meta name="description" content="Quanti — Smart automated money manager. Track UPI & bank transactions, auto-categorize spending, and visualize your finances." />
+    <title>Quanti · Smart Money Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="./css/styles.css" />
   </head>
   <body>
-    <div class="app">
-      <header class="app__header">
-        <div class="brand">
-          <span class="brand__mark">₹</span>
-          <div>
-            <h1 class="brand__title">Quanti</h1>
-            <p class="brand__sub">Automated UPI &amp; Bank Statement Manager</p>
+    <div class="app" id="app">
+
+      <!-- ═══ Top Bar ═══ -->
+      <header class="topbar">
+        <div class="topbar__left">
+          <div class="topbar__avatar" id="topbar-avatar">Q</div>
+          <div class="topbar__greeting">
+            <span id="greeting-text">Good afternoon</span>
+            <strong>Quanti User</strong>
           </div>
         </div>
-        <div class="summary" id="summary">
-          <div class="summary__item">
-            <span class="summary__label">Income</span>
-            <span class="summary__value summary__value--in" id="summary-income">—</span>
-          </div>
-          <div class="summary__item">
-            <span class="summary__label">Spend</span>
-            <span class="summary__value summary__value--out" id="summary-spend">—</span>
-          </div>
-          <div class="summary__item">
-            <span class="summary__label">Balance</span>
-            <span class="summary__value" id="summary-balance">—</span>
-          </div>
-          <div class="summary__item">
-            <span class="summary__label">Reward Pts</span>
-            <span class="summary__value summary__value--reward" id="summary-points">—</span>
-          </div>
+        <div class="topbar__actions">
+          <button class="topbar__btn" id="btn-search" aria-label="Search" style="position:relative;">
+            🔍
+          </button>
+          <button class="topbar__btn" id="btn-notify" aria-label="Notifications" style="position:relative;">
+            🔔
+            <span class="dot" style="position:absolute;"></span>
+          </button>
         </div>
       </header>
 
-      <!-- Visual Analytics Block -->
-      <section class="analytics" aria-label="Category analytics">
-        <h2 class="section__title">Spending by Category</h2>
-        <div class="analytics__grid" id="analytics-grid"></div>
-      </section>
-
-      <!-- Incoming alert simulator -->
-      <section class="composer" aria-label="Add transaction alert">
-        <h2 class="section__title">Simulate an Incoming Alert</h2>
-        <form class="composer__form" id="alert-form">
-          <input
-            class="composer__input"
-            id="alert-input"
-            type="text"
-            autocomplete="off"
-            placeholder="e.g. Paid Rs. 250 to Zomato for dinner"
-          />
-          <button class="btn btn--primary" type="submit">Add</button>
-        </form>
-        <div class="composer__hints">
-          <span>Try:</span>
-          <button class="chip" type="button" data-sample="Paid Rs. 320 to Swiggy for breakfast">Swiggy</button>
-          <button class="chip" type="button" data-sample="Paid Rs. 150 to Uber ride">Uber</button>
-          <button class="chip" type="button" data-sample="Received Rs. 50,000 from Acme Payroll Salary">Salary</button>
-          <button class="chip" type="button" data-sample="Paid Rs. 999 via CRED Cashback offer">Cashback</button>
+      <!-- ═══ Hero Balance Card ═══ -->
+      <section class="hero" aria-label="Account balance overview">
+        <div class="hero__label">Total Balance</div>
+        <div class="hero__balance" id="hero-balance">
+          <span class="currency">₹</span><span id="balance-value">—</span>
         </div>
-        <p class="composer__error" id="alert-error" role="alert"></p>
+        <div class="hero__stats">
+          <div class="hero__stat">
+            <div class="hero__stat-label">
+              <span class="dot-indicator dot-indicator--green"></span>
+              Income
+            </div>
+            <div class="hero__stat-value" id="stat-income">—</div>
+          </div>
+          <div class="hero__stat">
+            <div class="hero__stat-label">
+              <span class="dot-indicator dot-indicator--red"></span>
+              Spent
+            </div>
+            <div class="hero__stat-value" id="stat-spend">—</div>
+          </div>
+          <div class="hero__stat">
+            <div class="hero__stat-label">
+              <span class="dot-indicator dot-indicator--gold"></span>
+              Rewards
+            </div>
+            <div class="hero__stat-value" id="stat-points">—</div>
+          </div>
+        </div>
       </section>
 
-      <!-- Transaction Stream -->
-      <section class="stream" aria-label="Transaction stream">
-        <h2 class="section__title">Transaction Stream</h2>
-        <div class="stream__list" id="stream-list"></div>
+      <!-- ═══ Quick Actions ═══ -->
+      <section class="quick-actions" aria-label="Quick category actions">
+        <div class="quick-actions__title">Categories</div>
+        <div class="quick-actions__grid">
+          <button class="quick-action" data-cat="FOOD" id="qa-food">
+            <div class="quick-action__icon quick-action__icon--food">🍕</div>
+            <span class="quick-action__label">Food &amp; Dining</span>
+          </button>
+          <button class="quick-action" data-cat="TRAVEL" id="qa-travel">
+            <div class="quick-action__icon quick-action__icon--travel">🚗</div>
+            <span class="quick-action__label">Travel</span>
+          </button>
+          <button class="quick-action" data-cat="SALARY" id="qa-salary">
+            <div class="quick-action__icon quick-action__icon--salary">💰</div>
+            <span class="quick-action__label">Salary</span>
+          </button>
+          <button class="quick-action" data-cat="MISC" id="qa-misc">
+            <div class="quick-action__icon quick-action__icon--misc">✨</div>
+            <span class="quick-action__label">Miscellaneous</span>
+          </button>
+        </div>
       </section>
+
+      <!-- ═══ Analytics Section ═══ -->
+      <section class="section" aria-label="Category analytics">
+        <div class="section__header">
+          <h2 class="section__title">Spending Analytics</h2>
+          <button class="section__link" id="btn-see-all-analytics">Details →</button>
+        </div>
+        <div class="analytics-scroll" id="analytics-scroll"></div>
+      </section>
+
+      <!-- ═══ Transaction Stream ═══ -->
+      <section class="section" aria-label="Transaction stream">
+        <div class="section__header">
+          <h2 class="section__title">Recent Transactions</h2>
+          <button class="section__link" id="btn-see-all-tx">See all</button>
+        </div>
+        <div class="tx-list" id="tx-list"></div>
+      </section>
+
     </div>
+
+    <!-- ═══ Bottom Sheet Composer ═══ -->
+    <div class="sheet-backdrop" id="sheet-backdrop"></div>
+    <div class="sheet" id="sheet" role="dialog" aria-label="Add transaction">
+      <div class="sheet__handle"></div>
+      <div class="sheet__content">
+        <div class="sheet__title">Add Transaction</div>
+        <form id="alert-form">
+          <div class="sheet__input-wrap">
+            <input
+              class="sheet__input"
+              id="alert-input"
+              type="text"
+              autocomplete="off"
+              placeholder="Paste any bank/UPI SMS — even a suspicious one"
+            />
+            <button class="sheet__btn" type="submit" id="alert-submit" aria-label="Submit transaction">→</button>
+          </div>
+        </form>
+        <span class="sheet__chip-label">Quick examples</span>
+        <div class="sheet__chips">
+          <button class="chip" type="button" data-sample="Paid Rs. 320 to Swiggy for breakfast">🍔 Swiggy</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 150 to Uber ride">🚕 Uber</button>
+          <button class="chip" type="button" data-sample="Received Rs. 50,000 from Acme Payroll Salary">💸 Salary</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 999 via CRED Cashback offer">🎁 Cashback</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 450 to BigBasket groceries">🛒 Groceries</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 299 to Amazon Pay">📦 Amazon</button>
+          <button class="chip" type="button" data-sample="URGENT: Your KYC is blocked. Verify now at http://sbi-verify.xyz to receive Rs.5000 refund">⚠️ Fraud SMS</button>
+        </div>
+        <p class="sheet__error" id="alert-error" role="alert"></p>
+      </div>
+    </div>
+
+    <!-- ═══ Category Change Modal ═══ -->
+    <div class="cat-modal-backdrop" id="cat-modal-backdrop"></div>
+    <div class="cat-modal" id="cat-modal" role="dialog" aria-label="Change category">
+      <div class="cat-modal__handle"></div>
+      <div class="cat-modal__title">Select Category</div>
+      <div class="cat-modal__list" id="cat-modal-list"></div>
+    </div>
+
+    <!-- ═══ Bottom Navigation ═══ -->
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-item active" id="nav-home" data-tab="home">
+        <span class="nav-item__icon">🏠</span>
+        <span class="nav-item__label">Home</span>
+      </button>
+      <button class="nav-item" id="nav-analytics" data-tab="analytics">
+        <span class="nav-item__icon">📊</span>
+        <span class="nav-item__label">Analytics</span>
+      </button>
+      <button class="nav-fab" id="nav-add" aria-label="Add transaction">
+        +
+      </button>
+      <button class="nav-item" id="nav-history" data-tab="history">
+        <span class="nav-item__icon">🕐</span>
+        <span class="nav-item__label">History</span>
+      </button>
+      <button class="nav-item" id="nav-profile" data-tab="profile">
+        <span class="nav-item__icon">👤</span>
+        <span class="nav-item__label">Profile</span>
+      </button>
+    </nav>
 
     <script src="./js/api.js"></script>
     <script src="./js/app.js"></script>

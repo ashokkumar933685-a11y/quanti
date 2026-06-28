@@ -22,8 +22,20 @@ function computeMetrics(transactions) {
   let totalIncome = 0;
   let totalSpend = 0;
   let totalExpectedPoints = 0;
+  let needsReviewCount = 0;
+  let suspiciousCount = 0;
 
   for (const tx of transactions) {
+    if (tx.needsReview) needsReviewCount += 1;
+    if (tx.suspicious) suspiciousCount += 1;
+
+    // Records with no detectable amount (e.g. pasted fraud/spam) and
+    // 'unknown'-direction records contribute to neither income nor spend.
+    const hasAmount = tx.amount !== null && Number.isFinite(Number(tx.amount));
+    if (!hasAmount || tx.direction === 'unknown') {
+      continue;
+    }
+
     const signedReducerStep = reduceTransaction(tx);
 
     if (signedReducerStep.direction === 'credit') {
@@ -69,6 +81,8 @@ function computeMetrics(transactions) {
       balance: round2(balance),
       expectedPoints: totalExpectedPoints,
       transactionCount: transactions.length,
+      needsReviewCount,
+      suspiciousCount,
     },
   };
 }
