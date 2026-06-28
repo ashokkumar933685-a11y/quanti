@@ -13,6 +13,9 @@ const els = {
   statSpend:      document.getElementById('stat-spend'),
   statPoints:     document.getElementById('stat-points'),
   greetingText:   document.getElementById('greeting-text'),
+  heroBanner:     document.getElementById('hero-alert-banner'),
+  heroSuspiciousPill: document.getElementById('hero-suspicious-pill'),
+  heroSuspiciousCount: document.getElementById('hero-suspicious-count'),
 
   /* Analytics */
   analyticsScroll: document.getElementById('analytics-scroll'),
@@ -152,6 +155,17 @@ function renderSummary(totals) {
   // Points (no prefix)
   const pointsTarget = totals.expectedPoints || 0;
   animateValue(els.statPoints, pointsTarget, '', 600);
+
+  const suspiciousCount = Number(totals.suspiciousCount || 0);
+  if (els.heroBanner) {
+    els.heroBanner.hidden = suspiciousCount === 0;
+  }
+  if (els.heroSuspiciousPill) {
+    els.heroSuspiciousPill.hidden = suspiciousCount === 0;
+  }
+  if (els.heroSuspiciousCount) {
+    els.heroSuspiciousCount.textContent = suspiciousCount;
+  }
 }
 
 function renderAnalytics(categories) {
@@ -321,19 +335,21 @@ function renderStream(transactions) {
       const catName = catLabel ? catLabel.label : catKey;
 
       return `
-        <div class="tx-item" data-id="${tx.id}">
+        <div class="tx-item ${tx.suspicious ? 'tx-item--fraud' : ''}" data-id="${tx.id}">
           <div class="tx-item__icon ${iconClass}">${emoji}</div>
           <div class="tx-item__body">
             <div class="tx-item__desc">${escapeHtml(tx.description)}</div>
             <div class="tx-item__meta">
               <span>${formatTime(tx.timestamp)}</span>
               ${autoBadge}
+              ${fraudBadge}
             </div>
           </div>
           <div class="tx-item__right">
             <div class="tx-item__amount ${amtClass}">${amtText}</div>
             <button class="tx-item__category-btn" data-id="${tx.id}" data-current="${catKey}">${escapeHtml(catName)}</button>
           </div>
+          ${fraudHtml}
           ${savingsHtml}
         </div>`;
     })

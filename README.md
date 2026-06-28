@@ -1,64 +1,80 @@
-# Quanti — Automated Money Manager
+# Quanti — Smart Money Manager
 
-An automated money manager that mimics a digital banking statement page. It parses
-unstructured UPI/bank transaction alerts, auto-categorizes them, and visualizes
-spending habits. **All business logic — parsing, categorization, reward detection,
-and metric aggregation — lives on the server.** The frontend is presentation-only.
+Quanti is a mobile-style finance dashboard that turns raw UPI and bank SMS alerts
+into a polished money-management experience. It parses unstructured transaction
+messages, auto-categorizes them, detects suspicious activity, and presents the
+results through a clean, interactive frontend.
 
-## Features
+All core business logic — parsing, categorization, reward detection, fraud heuristics,
+and metric aggregation — runs on the server. The frontend is focused on presentation
+and interaction.
 
-- **Transaction Stream** — a chronological feed of transaction cards. Each card shows
-  a clean description, the signed value (green credit / red debit), and an interactive
-  category dropdown.
-- **Visual Analytics Block** — a row of category progress blocks (Food & Dining,
-  Travel, Salary, Miscellaneous) whose tracks fill as transactions flow in.
-- **Automated Keyword Tagging Parser** — scans the raw alert for known merchant
-  keywords (Zomato, Swiggy, Uber, …) and auto-assigns a fallback category.
-- **Cumulative Metric Reducer** — isolates incoming (credit) from outbound (debit)
-  values and aggregates per-category sums plus headline totals.
-- **Expected Savings rule** — any outbound alert containing `Cashback` or a known
-  reward partner (CRED, Amazon Pay, …) injects a green "Expected Savings" sub-metric
-  showing simulated projected reward points under that card.
+## What the app does
+
+- Ingests raw SMS alerts through the transaction composer and API.
+- Extracts amount, direction, merchant context, and category from each alert.
+- Auto-tags everyday expenses and income into Food, Travel, Salary, and Miscellaneous.
+- Detects expected savings for cashback or reward-style messages.
+- Flags suspicious messages that contain web links, OTP requests, KYC scare tactics,
+  or urgency-based wording.
+- Displays a warning banner and suspicious count on the hero card.
+- Renders analytics cards with ring/bar toggles and comparison bars.
+- Supports bottom navigation for Home, Analytics, History, and Profile views.
+- Allows manual category overrides directly from transaction cards.
+
+## Main features
+
+- **Transaction stream** — a chronological list of transactions with signed amounts,
+  category labels, and fraud highlights.
+- **Fraud detection** — suspicious alerts are marked with a red warning badge,
+  warning banner, and explanation text.
+- **Analytics** — category cards show spending progress, can switch between ring and
+  bar mode, and include comparative bars for quick comparisons.
+- **Reward detection** — cashback and reward-related alerts surface simulated
+  expected savings details.
+- **Bottom sheet composer** — paste or type a bank/UPI SMS and add it instantly.
+- **Server-side metrics** — balances, category totals, suspicious counts, and
+  expected-points totals are all computed centrally.
 
 ## Architecture
 
-```
-server.js                     # entry point: seeds data, starts the server
+```text
+server.js                     # entry point: seeds demo data and starts the app
 src/
-  app.js                      # express app wiring (json, routes, static, errors)
+  app.js                      # Express app wiring, middleware, and static hosting
   config/
-    categories.js             # canonical category definitions
-    keywords.js               # merchant keywords + reward partners + rates
+    categories.js             # canonical categories
+    keywords.js               # merchant keywords, reward partners, and fraud signals
   data/
-    store.js                  # in-memory transaction store (swappable for a DB)
+    store.js                  # in-memory transaction store
   services/
-    parserService.js          # keyword tagging parser + reward detection
-    metricsService.js         # cumulative metric reducer
-    transactionService.js     # orchestration (ingest, recategorize, dashboard)
+    parserService.js          # parsing, categorization, reward detection, fraud logic
+    metricsService.js         # aggregate totals and category metrics
+    transactionService.js     # orchestration for ingest, re-categorize, and dashboard data
   controllers/
-    transactionController.js  # thin HTTP layer
+    transactionController.js  # API request handlers
   routes/
-    index.js                  # API routes
-public/                       # presentation-only frontend
-  index.html
-  css/styles.css
+    index.js                  # route wiring
+public/
+  index.html                  # mobile-style app shell
+  css/styles.css              # UI styling and interactions
   js/api.js                   # API client
-  js/app.js                   # rendering + interactions
+  js/app.js                   # dashboard rendering and frontend behavior
 ```
 
-The layering (routes → controllers → services → store/config) keeps the HTTP
-surface thin and all the domain logic isolated and testable.
+The layering keeps HTTP logic thin while preserving a clean separation between
+presentation and business rules.
 
 ## API
 
-| Method | Endpoint                          | Purpose                                  |
-| ------ | --------------------------------- | ---------------------------------------- |
-| GET    | `/api/dashboard`                  | Transactions + aggregated metrics        |
-| GET    | `/api/transactions`               | Chronological transaction feed           |
-| POST   | `/api/transactions`               | Ingest a raw alert (`{ rawMessage }`)    |
-| PATCH  | `/api/transactions/:id/category`  | Manual category override (`{ category }`)|
-| GET    | `/api/metrics`                    | Category sums + totals                    |
-| GET    | `/api/categories`                 | Selectable category tags                 |
+| Method | Endpoint | Purpose |
+| ------ | -------- | ------- |
+| GET | `/api/dashboard` | Returns transactions and aggregated dashboard metrics |
+| GET | `/api/transactions` | Returns the transaction feed |
+| POST | `/api/transactions` | Ingests a raw alert (`{ rawMessage }`) |
+| PATCH | `/api/transactions/:id/category` | Updates a transaction category |
+| GET | `/api/metrics` | Returns totals and category-level metrics |
+| GET | `/api/categories` | Returns available categories |
 
 ## Running locally
 
@@ -68,17 +84,17 @@ npm start
 # open http://localhost:3000
 ```
 
-The server seeds a few realistic alerts on boot so the dashboard isn't empty.
+The app seeds a few realistic sample alerts on startup so the dashboard is populated
+immediately.
 
 ## How the parser works
 
 Given a raw alert such as `Paid Rs. 250 to Zomato for lunch order`:
 
-1. **Amount** is extracted via regex (`Rs.`, `INR`, `₹`, with comma handling).
-2. **Direction** is decided by the earliest directional keyword in the text
-   (`Paid`/`Sent`/`Debited` → debit, `Received`/`Credited` → credit). Word-boundary
-   matching prevents false positives like "credit" inside "credit card".
-3. **Category** is auto-assigned from the first matched merchant keyword, else
-   falls back to `Miscellaneous`.
-4. **Expected Savings** is attached only to outbound transactions that mention
-   `Cashback` or a known reward partner; points are simulated as a % of spend.
+1. **Amount** is extracted using regex for `Rs.`, `INR`, `₹`, and comma-separated values.
+2. **Direction** is inferred from the earliest directional keyword in the text.
+3. **Category** is assigned from the first matched merchant keyword, otherwise it falls
+   back to `Miscellaneous`.
+4. **Expected Savings** is attached when the message mentions cashback or a reward partner.
+5. **Fraud signals** are detected when the text contains suspicious indicators such as
+   web links, OTP requests, KYC pressure, or urgency-based scare tactics.
