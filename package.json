@@ -1,0 +1,23 @@
+{
+  "name": "quanti-money-manager",
+  "version": "1.0.0",
+  "description": "Automated money manager that parses UPI/bank transaction alerts, auto-categorizes them, and visualizes spending. All business logic is server-side.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "fintech",
+    "upi",
+    "transactions",
+    "categorization",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
