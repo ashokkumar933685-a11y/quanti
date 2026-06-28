@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quanti · Money Manager</title>
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app__header">
+        <div class="brand">
+          <span class="brand__mark">₹</span>
+          <div>
+            <h1 class="brand__title">Quanti</h1>
+            <p class="brand__sub">Automated UPI &amp; Bank Statement Manager</p>
+          </div>
+        </div>
+        <div class="summary" id="summary">
+          <div class="summary__item">
+            <span class="summary__label">Income</span>
+            <span class="summary__value summary__value--in" id="summary-income">—</span>
+          </div>
+          <div class="summary__item">
+            <span class="summary__label">Spend</span>
+            <span class="summary__value summary__value--out" id="summary-spend">—</span>
+          </div>
+          <div class="summary__item">
+            <span class="summary__label">Balance</span>
+            <span class="summary__value" id="summary-balance">—</span>
+          </div>
+          <div class="summary__item">
+            <span class="summary__label">Reward Pts</span>
+            <span class="summary__value summary__value--reward" id="summary-points">—</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Visual Analytics Block -->
+      <section class="analytics" aria-label="Category analytics">
+        <h2 class="section__title">Spending by Category</h2>
+        <div class="analytics__grid" id="analytics-grid"></div>
+      </section>
+
+      <!-- Incoming alert simulator -->
+      <section class="composer" aria-label="Add transaction alert">
+        <h2 class="section__title">Simulate an Incoming Alert</h2>
+        <form class="composer__form" id="alert-form">
+          <input
+            class="composer__input"
+            id="alert-input"
+            type="text"
+            autocomplete="off"
+            placeholder="e.g. Paid Rs. 250 to Zomato for dinner"
+          />
+          <button class="btn btn--primary" type="submit">Add</button>
+        </form>
+        <div class="composer__hints">
+          <span>Try:</span>
+          <button class="chip" type="button" data-sample="Paid Rs. 320 to Swiggy for breakfast">Swiggy</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 150 to Uber ride">Uber</button>
+          <button class="chip" type="button" data-sample="Received Rs. 50,000 from Acme Payroll Salary">Salary</button>
+          <button class="chip" type="button" data-sample="Paid Rs. 999 via CRED Cashback offer">Cashback</button>
+        </div>
+        <p class="composer__error" id="alert-error" role="alert"></p>
+      </section>
+
+      <!-- Transaction Stream -->
+      <section class="stream" aria-label="Transaction stream">
+        <h2 class="section__title">Transaction Stream</h2>
+        <div class="stream__list" id="stream-list"></div>
+      </section>
+    </div>
+
+    <script src="./js/api.js"></script>
+    <script src="./js/app.js"></script>
+  </body>
+</html>
